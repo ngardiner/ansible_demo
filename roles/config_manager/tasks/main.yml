@@ -1,0 +1,65 @@
+---
+  - name: Get Config Lock
+    raw: '"{{ item }}"'
+    args:
+      executable: /etc/cli.sh -i
+    with_items:
+      - lock database override
+    ignore_errors: True
+
+  - name: Set standard configuration
+    raw: '"{{ item }}"'
+    args:
+      executable: /etc/cli.sh -si
+    with_items:
+      - set dns primary 8.8.8.8
+      - set dns secondary 8.8.4.4
+      - set dns suffix checkpoint.local
+      - set domainname checkpoint.local
+      - set ntp server primary pool.ntp.org version 2
+      - set ntp server secondary pool.au.ntp.org version 2
+      - set ntp active on
+      - set snmp agent on
+      - set snmp agent-version any
+
+  - name: Add SCP User
+    raw: '"{{ item }}"'
+    args:
+      executable: /etc/cli.sh -si
+    with_items:
+      - add user scpuser uid 2600 homedir /home/scpuser
+      - set user scpuser realname SCPUser
+      - add rba role scpRole domain-type System readwrite-features expert
+      - add rba user scpuser roles scpRole
+      - set user scpuser gid 100 shell /usr/bin/scponly
+      - set user scpuser password-hash '{{ "vpn123" | passlib_hash() }}'
+      - unlock database
+
+  - name: Download useful python scripts from official Check Point repository
+    raw: '"{{ item }}"'
+    args:
+      executable: /bin/bash
+    with_items:
+      - mkdir -p scripts
+      - mkdir -p scripts/add_access_rule
+      - mkdir -p scripts/clone_host
+      - mkdir -p scripts/discard_sessions
+      - mkdir -p scripts/find_duplicate_ip
+      - mkdir -p scripts/lib
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/add_access_rule/add_access_rule.py > scripts/add_access_rule/add_access_rule.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/clone_host/clone_host.py > scripts/clone_host/clone_host.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/discard_sessions/discard_sessions.py > scripts/discard_sessions/discard_sessions.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/find_duplicate_ip/find_dup_ip.py > scripts/find_duplicate_ip/find_dup_ip.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/lib/__init__.py > scripts/lib/__init__.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/lib/api_exceptions.py > scripts/lib/api_exceptions.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/lib/api_response.py > scripts/lib/api_response.py
+      - . /etc/profile && /opt/CPsuite-R80/fw1/bin/curl_cli -k https://raw.githubusercontent.com/CheckPoint-APIs-Team/cp_mgmt_api_python_sdk/master/lib/mgmt_api.py > scripts/lib/mgmt_api.py
+      - chmod 0700 scripts/add_access_rule/add_access_rule.py
+      - chmod 0700 scripts/clone_host/clone_host.py
+      - chmod 0700 scripts/discard_sessions/discard_sessions.py
+      - chmod 0700 scripts/find_duplicate_ip/find_dup_ip.py
+
+  - name: Run First Time Wizard
+    raw: '"config_system -s install_security_gw=false&install_security_managment=true&install_mgmt_primary=true&mgmt_admin_name=admin&mgmt_admin_passwd=vpn123&mgmt_gui_clients_radio=any"'
+    args:
+      executable: /bin/bash

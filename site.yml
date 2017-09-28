@@ -1,0 +1,23 @@
+  - hosts: localhost
+    connection: local
+    gather_facts: False
+    roles:
+      - testmgr
+
+  - hosts: checkpoint_mgrs
+    connection: ssh
+    gather_facts: False
+    user: admin
+    vars:
+        ansible_ssh_private_key_file: /etc/ansible/keys/ansible-key.pem
+    roles:
+      - config_manager
+
+  - hosts: checkpoint_gws
+    connection: ssh
+    gather_facts: False
+    user: admin
+    vars:
+        ansible_ssh_private_key_file: /etc/ansible/keys/ansible-key.pem
+    roles:
+      - config_gateway
