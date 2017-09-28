@@ -1,0 +1,26 @@
+---
+  - name: Get Config Lock
+    raw: '"{{ item }}"'
+    args:
+      executable: /etc/cli.sh -i
+    with_items:
+      - lock database override
+    ignore_errors: True
+
+  - name: Add SCP User
+    raw: '"{{ item }}"'
+    args:
+      executable: /etc/cli.sh -si
+    with_items:
+      - add user scpuser uid 2600 homedir /home/scpuser
+      - set user scpuser realname SCPUser
+      - add rba role scpRole domain-type System readwrite-features expert
+      - add rba user scpuser roles scpRole
+      - set user scpuser gid 100 shell /usr/bin/scponly
+      - set user scpuser password-hash '{{ admin_password | passlib_hash() }}'
+      - unlock database
+
+  - name: Run First Time Wizard
+    raw: '"config_system -s install_security_gw=true&install_ppak=true&gateway_cluster_member=true&ftw_sic_key=vpn123"'
+    args:
+      executable: /bin/bash

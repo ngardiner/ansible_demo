@@ -1,0 +1,205 @@
+---
+
+  - name: Create VPC
+    ec2_vpc_net:
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      cidr_block: 10.0.0.0/16
+      name: NG
+      region: "{{ my_aws_region }}"
+      state: present
+    register: vpc
+
+  - name: Create VPC Public Subnet
+    ec2_vpc_subnet:
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}" 
+      vpc_id: "{{ vpc.vpc.id }}"
+      cidr: 10.0.10.0/24
+      state: present
+      region: "{{ my_aws_region }}"
+      resource_tags:
+        Name: Public
+    register: public_subnet
+
+  - name: Create VPC Private Subnet
+    ec2_vpc_subnet:
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      vpc_id: "{{ vpc.vpc.id }}"
+      cidr: 10.0.20.0/24
+      state: present
+      region: "{{ my_aws_region }}"
+      resource_tags:
+        Name: Private
+    register: private_subnet
+
+  - name: Create Internet Gateway for Public Subnet
+    ec2_vpc_igw:
+      vpc_id: "{{ vpc.vpc.id }}"
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      region: "{{ my_aws_region }}"
+      state: present
+    register: public_igw
+
+  - name: Set public routing table 
+    ec2_vpc_route_table:
+      vpc_id: "{{ vpc.vpc.id }}"
+      region: "{{ my_aws_region }}"
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      tags:
+        Name: "Public"
+      subnets:
+        - "{{ public_subnet.subnet.id }}"
+      routes:
+        - dest: 0.0.0.0/0
+          gateway_id: "{{ public_igw.gateway_id }}"
+
+  - name: Create EC2 Security Group for Check Point Management Server
+    ec2_group:
+      name: Checkpoint_Management
+      description: Check Point Management Server Ports
+      region: "{{ my_aws_region }}"
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      rules:
+        - proto: tcp
+          from_port: 22
+          to_port: 22
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 443
+          to_port: 443
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 18190
+          to_port: 18190
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 19009
+          to_port: 19009
+          cidr_ip: 0.0.0.0/0
+      vpc_id: "{{ vpc.vpc.id }}"
+
+  - name: Create EC2 Security Group for Check Point Security Gateway
+    ec2_group:
+      name: Checkpoint_Gateway
+      description: Check Point Security Gateway Ports
+      region: "{{ my_aws_region }}"
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      rules:
+        - proto: tcp
+          from_port: 1
+          to_port: 65535
+          cidr_ip: 0.0.0.0/0
+        - proto: udp
+          from_port: 1
+          to_port: 65535
+          cidr_ip: 0.0.0.0/0
+      vpc_id: "{{ vpc.vpc.id }}"
+
+  - name: Deploy Check Point Management Server
+    ec2:
+      key_name: ansible-key
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      instance_type: m4.large
+      image: ami-4afda15c
+      vpc_subnet_id: "{{ public_subnet.subnet.id }}"
+      region: "{{ my_aws_region }}"
+      wait: yes
+      assign_public_ip: yes
+      group: Checkpoint_Management
+      user_data: |
+        #!/bin/bash
+        clish -c 'set hostname mymanager' -si
+        clish -c 'set user admin shell /bin/bash' -si
+        clish -c 'set user admin password-hash {{ admin_password | passlib_hash() }}' -si
+        clish -c 'set expert-password-hash {{ admin_password | passlib_hash() }}' -si
+    register: ec2_mgt
+
+  - name: Deploy Check Point Security Gateway (x 2)
+    ec2:
+      key_name: ansible-key
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      instance_type: m4.large
+      image: ami-4afda15c
+      vpc_subnet_id: "{{ public_subnet.subnet.id }}"
+      region: "{{ my_aws_region }}"
+      wait: yes
+      assign_public_ip: yes
+      group: Checkpoint_Gateway
+      count: 2
+      user_data: |
+        #!/bin/bash
+        clish -c "set hostname mygw" -si
+        clish -c "set user admin shell /bin/bash" -si
+        clish -c 'set user admin password-hash {{ admin_password | passlib_hash() }}' -si
+        clish -c 'set expert-password-hash {{ admin_password | passlib_hash() }}' -si
+    register: ec2_gw
+
+  - name: Wait for Management instance to become available
+    wait_for:
+      host: "{{ item.public_ip }}"
+      port: 22
+      delay: 60
+      timeout: 800
+      state: started
+    with_items: ec2_mgt.instances
+
+  - name: Wait for Gateway instances to become available
+    wait_for:
+      host: "{{ item.public_ip }}"
+      port: 22
+      delay: 60
+      timeout: 800
+      state: started
+    with_items: ec2_gw.instances
+
+  - name: Add AWS Instance key fingerprint to known hosts
+    shell: ssh-keyscan -H {{ item.public_ip }} >> /root/.ssh/known_hosts
+    with_items: ec2_mgt.instances
+
+  - name: Add AWS Instance key fingerprint to known hosts
+    shell: ssh-keyscan -H {{ item.public_ip }} >> /root/.ssh/known_hosts
+    with_items: ec2_gw.instances
+
+  - name: Add tag to instances (Management)
+    ec2_tag:
+      resource: "{{ item.id }}"
+      region: "{{ my_aws_region }}"
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      state: present
+    with_items: ec2_mgt.instances
+    args:
+      tags:
+        Name: chkpmanager
+
+  - name: Add tag to instances (Gateway)
+    ec2_tag:
+      resource: "{{ item.id }}"
+      region: "{{ my_aws_region }}"
+      aws_access_key: "{{ my_aws_access_key }}"
+      aws_secret_key: "{{ my_aws_secret_key }}"
+      state: present
+    with_items: ec2_gw.instances
+    args:
+      tags:
+        Name: chkpgateway
+
+  - name: Add new instance to ansible host group (Management)
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      groupname: checkpoint_mgrs
+    with_items: ec2_mgt.instances
+
+  - name: Add new instance to ansible host group (Gateway)
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      groupname: checkpoint_gws
+    with_items: ec2_gw.instances
