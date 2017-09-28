@@ -24,6 +24,7 @@ In this lab, we will establish an Ansible setup which will connect to AWS and de
   3. Type ``sudo su -`` to get a root prompt (if your user account is not a superuser)
 
   4. Install the git package
+
   ```apt-get install git```
 
   5. Clone the git repository for Lab 1
@@ -34,6 +35,7 @@ In this lab, we will establish an Ansible setup which will connect to AWS and de
   ```
 
   6. Run the setup script to install all of the necessary packages and prerequisites
+
   ``` /etc/ansible/setup.sh ```
 
   7. Log into AWS (https://aws.amazon.com)
@@ -42,7 +44,18 @@ In this lab, we will establish an Ansible setup which will connect to AWS and de
 
   <img src="images/ssh1.png" />
 
-  - Save the key file locally, and upload it to your Ansible virtual machine
+  - Download and save the key file locally on your PC, and upload it to your Ansible virtual machine
   - Place the file in ``/etc/ansible/keys/ansible-key.ssh``
 
-  7. Log into AWS, and add a role to be used
+  9. In the AWS console, select IAM (Identity and Access Management) Console.
+
+  - Select the Users tab
+  - Select Add User
+  - Enter the username ```admin``` and select Programmatic access type. Click Next.
+
+  <img src="images/ssh2.png" />
+
+  - Select the attach existing policies directly option
+  - Select the AdministratorAccess policy. Click Next.
+
+  <img src="images/ssh3.png" />
