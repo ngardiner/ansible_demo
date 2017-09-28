@@ -3,7 +3,7 @@
 ## Introduction
 Welcome! This lab is intended to demonstrate the use of an automation platform (Ansible) with Check Point Management and Gateway components.
 
-In this lab, we will establish an Ansible setup which 
+In this lab, we will establish an Ansible setup which will connect to AWS and deploy one Management server and two Gateways.
 
 ## Requirements
   - Debian or Ubuntu ISO image
@@ -14,18 +14,35 @@ In this lab, we will establish an Ansible setup which
 
   1. Create a new VMWare Virtual Machine
 
-  Guest Operating System: Linux
-  Version: Ubuntu
-  Maximum Disk Size: 10GB
+  - Guest Operating System: Linux
+  - Version: Ubuntu
+  - Maximum Disk Size: 10GB
+  - Feel free to create a user account named whatever you would like, with any password you would like.
 
-  2. Boot the Virtual Machine
+  2. Boot the Virtual Machine and log in as the user you created during installation
 
-  3. Install the git package
+  3. Type ``sudo su -`` to get a root prompt (if your user account is not a superuser)
+
+  4. Install the git package
   ```apt-get install git```
 
-  4. Clone the git repository for 
+  5. Clone the git repository for Lab 1
   ```
     mkdir /etc/ansible
     cd /etc
-    git clone https://github.com/ngardiner/ansible_demo.git ansible
+    git clone -b lab1.0 https://github.com/ngardiner/ansible_demo.git ansible
   ```
+
+  6. Run the setup script to install all of the necessary packages and prerequisites
+  ``` /etc/ansible/setup.sh ```
+
+  7. Log into AWS (https://aws.amazon.com)
+
+  8. Select EC2 > Key Pairs and select Create Key Pair. Name it ansible-key.
+
+  <img src="images/ssh1.png" />
+
+  - Save the key file locally, and upload it to your Ansible virtual machine
+  - Place the file in ``/etc/ansible/keys/ansible-key.ssh``
+
+  7. Log into AWS, and add a role to be used
